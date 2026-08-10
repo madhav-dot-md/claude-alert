@@ -88,6 +88,7 @@ All optional environment variables, read at hook time:
 | `CLAUDE_ALERT_MAX` | `15` | Maximum repeats (≈5 minutes at the default interval) |
 | `CLAUDE_ALERT_DISABLE` | unset | Set to `1` to mute entirely |
 | `CLAUDE_ALERT_PLAYER` | auto | Playback command; overridden by tests |
+| `CLAUDE_ALERT_HOME` | `~/.claude` | Where `alert-sound.*` is looked up. A test seam, not a user-facing knob — it exists so the suite never touches the real home directory. |
 
 ### Sound resolution
 
@@ -117,8 +118,11 @@ claude-alert/                                 ← GitHub repo; also the marketpl
 │           ├── lib.sh
 │           ├── alert-start.sh
 │           ├── alert-loop.sh
-│           └── alert-stop.sh
-├── tests/run.sh
+│           ├── alert-stop.sh
+│           └── alert-test.sh
+├── tests/
+│   ├── run.sh
+│   └── helpers/fake-player.sh
 ├── .github/workflows/ci.yml
 ├── LICENSE                                   ← MIT
 └── README.md
