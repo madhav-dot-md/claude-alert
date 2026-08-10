@@ -8,6 +8,14 @@ REPO_ROOT="$(cd -- "$TESTS_DIR/.." && pwd)"
 SCRIPTS="$REPO_ROOT/plugins/claude-alert/scripts"
 FILTER="${1:-}"
 
+# Captured once, before any test points TMPDIR at a sandbox that later gets
+# rm -rf'd. Every setup() after the first must still hand mktemp a real,
+# existing parent — GNU mktemp (unlike BSD mktemp) fails outright when
+# TMPDIR points at a deleted directory, and with no set -e that failure
+# would otherwise go unnoticed and leave the harness operating on
+# ${TMPDIR:-/tmp} for real, i.e. the user's actual state dir.
+ORIG_TMPDIR="${TMPDIR:-/tmp}"
+
 PASS=0
 FAIL=0
 
@@ -38,7 +46,11 @@ assert_not_ok() { # command-string label
 
 SANDBOX=""
 setup() {
-  SANDBOX="$(mktemp -d)"
+  SANDBOX="$(mktemp -d "$ORIG_TMPDIR/claude-alert-test.XXXXXX")"
+  if [ -z "$SANDBOX" ] || [ ! -d "$SANDBOX" ]; then
+    printf 'FATAL: mktemp -d failed to produce a sandbox directory — refusing to run tests against real state\n' >&2
+    exit 1
+  fi
   export TMPDIR="$SANDBOX/tmp"
   export CLAUDE_ALERT_HOME="$SANDBOX/claude"
   export FAKE_PLAYER_LOG="$SANDBOX/player.log"
@@ -69,6 +81,8 @@ play_count() { # counts recorded playbacks — one line per playback
     printf '0'
   fi
 }
+
+state_dir() { printf '%s/claude-alert-%s' "$TMPDIR" "$(id -u)"; } # mirrors lib.sh's alert_state_dir
 
 # --- lib.sh --------------------------------------------------------------
 
@@ -141,6 +155,30 @@ test_log_never_fails() {
   assert_ok "[ -f '$logfile' ]" "log file created"
 }
 
+test_state_dir_is_namespaced_by_uid() {
+  # shellcheck source=plugins/claude-alert/scripts/lib.sh
+  . "$SCRIPTS/lib.sh"
+  assert_eq "$TMPDIR/claude-alert-$(id -u)" "$(alert_state_dir)" \
+    "state dir is namespaced by the caller's uid, not shared across users"
+}
+
+test_state_dir_refuses_a_preexisting_symlink() {
+  # A shared TMPDIR fallback (TMPDIR unset) means another local user could
+  # pre-plant a symlink at our uid-namespaced path before we ever run.
+  # alert_safe_state_dir must refuse to follow it rather than logging or
+  # writing pidfiles through it.
+  # shellcheck source=plugins/claude-alert/scripts/lib.sh
+  . "$SCRIPTS/lib.sh"
+  local target dir
+  target="$SANDBOX/symlink-target"
+  dir="$(alert_state_dir)"
+  mkdir -p "$target" "$(dirname "$dir")"
+  ln -s "$target" "$dir"
+  assert_not_ok "alert_safe_state_dir create" "refuses a pre-existing symlink"
+  alert_log "must not land inside the symlink target"
+  assert_ok "[ ! -e '$target/alert.log' ]" "does not write through the symlinked state dir"
+}
+
 # --- alert-loop.sh -------------------------------------------------------
 
 wait_for_file() { # path timeout-tenths
@@ -160,15 +198,15 @@ test_loop_honours_the_repeat_cap() {
 }
 
 test_loop_writes_and_removes_its_pidfile() {
-  local pidfile="$TMPDIR/claude-alert/loop.pid"
-  mkdir -p "$TMPDIR/claude-alert"
+  local pidfile; pidfile="$(state_dir)/loop.pid"
+  mkdir -p "$(state_dir)"
   "$SCRIPTS/alert-loop.sh" "$CLAUDE_ALERT_HOME/alert-sound.wav" 1 0 "$pidfile"
   assert_ok "[ ! -f '$pidfile' ]" "pidfile removed on normal exit"
 }
 
 test_loop_stops_when_terminated() {
-  local pidfile="$TMPDIR/claude-alert/loop.pid"
-  mkdir -p "$TMPDIR/claude-alert"
+  local pidfile; pidfile="$(state_dir)/loop.pid"
+  mkdir -p "$(state_dir)"
   "$SCRIPTS/alert-loop.sh" "$CLAUDE_ALERT_HOME/alert-sound.wav" 50 1 "$pidfile" &
   wait_for_file "$pidfile" 30
   local pid; pid="$(cat "$pidfile")"
@@ -188,9 +226,9 @@ test_loop_kills_inflight_player_on_term() {
   # keeps playing to completion. play_count alone can't see this — it only
   # ever counts *completed* playbacks — so this test holds a handle on the
   # fake player's own PID and asserts that process is actually gone.
-  local pidfile="$TMPDIR/claude-alert/loop.pid"
+  local pidfile; pidfile="$(state_dir)/loop.pid"
   local player_pidfile="$SANDBOX/player.pid"
-  mkdir -p "$TMPDIR/claude-alert"
+  mkdir -p "$(state_dir)"
   FAKE_PLAYER_SLEEP=2 FAKE_PLAYER_PID_FILE="$player_pidfile" \
     "$SCRIPTS/alert-loop.sh" "$CLAUDE_ALERT_HOME/alert-sound.wav" 50 1 "$pidfile" &
   wait_for_file "$pidfile" 30
@@ -209,6 +247,8 @@ run_test test_resolve_sound_precedence
 run_test test_resolve_sound_fails_when_nothing_available
 run_test test_play_invokes_the_player
 run_test test_log_never_fails
+run_test test_state_dir_is_namespaced_by_uid
+run_test test_state_dir_refuses_a_preexisting_symlink
 run_test test_loop_honours_the_repeat_cap
 run_test test_loop_writes_and_removes_its_pidfile
 run_test test_loop_stops_when_terminated
@@ -225,7 +265,7 @@ start_once() { # session
 send_stop() { # session
   printf '{"session_id":"%s","hook_event_name":"PostToolUse"}' "$1" | "$SCRIPTS/alert-stop.sh"
 }
-pidfile_for() { printf '%s/claude-alert/%s.pid' "$TMPDIR" "$1"; }
+pidfile_for() { printf '%s/%s.pid' "$(state_dir)" "$1"; }
 
 test_start_arms_and_stop_disarms() {
   export CLAUDE_ALERT_INTERVAL=1 CLAUDE_ALERT_MAX=50
@@ -297,6 +337,57 @@ test_stop_is_a_noop_when_nothing_is_armed() {
   assert_ok "send_stop sess-none" "stop exits 0 with no alarm armed"
 }
 
+test_start_degrades_to_single_play_when_state_dir_is_unsafe() {
+  export CLAUDE_ALERT_INTERVAL=1 CLAUDE_ALERT_MAX=50
+  local target dir
+  target="$SANDBOX/symlink-target"
+  dir="$(state_dir)"
+  mkdir -p "$target" "$(dirname "$dir")"
+  ln -s "$target" "$dir"
+  start_loop sess-symlink
+  sleep 0.5
+  assert_eq "1" "$(play_count)" "still plays once when the state dir is unsafe to use"
+  assert_ok "[ ! -e '$target/sess-symlink.pid' ]" "no pidfile written into the symlinked target"
+}
+
+# Copies the real scripts into a scratch dir so a test can patch lib.sh's
+# behaviour (e.g. force alert_player or alert_sanitize_id to fail) while
+# still exercising the real alert-start.sh code path around it, rather than
+# reimplementing that logic in the test.
+make_patched_scripts() {
+  local dir="$SANDBOX/patched-scripts-$RANDOM"
+  mkdir -p "$dir"
+  cp "$SCRIPTS"/*.sh "$dir/"
+  chmod +x "$dir"/*.sh
+  printf '%s' "$dir"
+}
+
+test_start_does_not_arm_when_no_player_is_available() {
+  local patched; patched="$(make_patched_scripts)"
+  printf 'alert_player() { return 1; }\n' >> "$patched/lib.sh"
+  printf '{"session_id":"sess-noplayer","hook_event_name":"Notification"}' \
+    | "$patched/alert-start.sh" --loop
+  sleep 0.5
+  assert_eq "0" "$(play_count)" "nothing played when no player is available"
+  assert_ok "[ ! -f '$(pidfile_for sess-noplayer)' ]" \
+    "loop is never armed when no player is available, instead of running the full repeat cap"
+}
+
+test_start_refuses_to_arm_when_session_id_sanitises_to_empty() {
+  # A non-empty raw session_id that sanitises to empty can only happen if
+  # the sanitiser itself misbehaves (e.g. the illegal-byte-sequence bug that
+  # LC_ALL=C now closes). Reproduce that failure mode directly to prove
+  # alert-start.sh's post-sanitise guard — not just the sanitiser — is what
+  # stops it from arming.
+  local patched; patched="$(make_patched_scripts)"
+  printf 'alert_sanitize_id() { printf "%%s" ""; }\n' >> "$patched/lib.sh"
+  printf '{"session_id":"sess-broken","hook_event_name":"Notification"}' \
+    | "$patched/alert-start.sh" --loop
+  sleep 0.5
+  assert_eq "0" "$(play_count)" "nothing played when the sanitised id is empty"
+  assert_ok "! ls '$(state_dir)'/*.pid >/dev/null 2>&1" "no pidfile armed when the sanitised id is empty"
+}
+
 run_test test_start_arms_and_stop_disarms
 run_test test_sessions_are_independent
 run_test test_restarting_does_not_stack_alarms
@@ -305,6 +396,9 @@ run_test test_disable_suppresses_everything
 run_test test_malformed_input_is_ignored_without_error
 run_test test_missing_sound_never_breaks_the_hook
 run_test test_stop_is_a_noop_when_nothing_is_armed
+run_test test_start_degrades_to_single_play_when_state_dir_is_unsafe
+run_test test_start_does_not_arm_when_no_player_is_available
+run_test test_start_refuses_to_arm_when_session_id_sanitises_to_empty
 
 # --- manifests -----------------------------------------------------------
 
@@ -346,8 +440,8 @@ test_every_notification_type_is_wired() {
   for t in permission_prompt idle_prompt agent_needs_input agent_completed; do
     assert_ok "grep -q '$t' '$hooks'" "$t is wired"
   done
-  for t in UserPromptSubmit PostToolUse PermissionDenied SessionEnd; do
-    assert_ok "grep -q '$t' '$hooks'" "$t disarm is wired"
+  for t in UserPromptSubmit PostToolUse PostToolUseFailure PostToolBatch PermissionDenied SessionEnd Stop; do
+    assert_ok "grep -q '\"$t\"' '$hooks'" "$t disarm is wired"
   done
   # The highest-cost value in the whole manifest: if agent_completed were
   # ever wired to --loop instead of --once, every completed task would
