@@ -174,6 +174,27 @@ test_loop_stops_when_terminated() {
   assert_eq "$before" "$(play_count)" "no further playbacks after TERM"
 }
 
+test_loop_kills_inflight_player_on_term() {
+  # Guards against a specific regression: if alert-loop.sh backgrounds a
+  # wrapper (e.g. `alert_play "$sound" &`) instead of the player process
+  # itself, TERM kills the wrapper but the real player is orphaned and
+  # keeps playing to completion. play_count alone can't see this — it only
+  # ever counts *completed* playbacks — so this test holds a handle on the
+  # fake player's own PID and asserts that process is actually gone.
+  local pidfile="$TMPDIR/claude-alert/loop.pid"
+  local player_pidfile="$SANDBOX/player.pid"
+  mkdir -p "$TMPDIR/claude-alert"
+  FAKE_PLAYER_SLEEP=2 FAKE_PLAYER_PID_FILE="$player_pidfile" \
+    "$SCRIPTS/alert-loop.sh" "$CLAUDE_ALERT_HOME/alert-sound.wav" 50 1 "$pidfile" &
+  wait_for_file "$pidfile" 30
+  wait_for_file "$player_pidfile" 30
+  local loop_pid; loop_pid="$(cat "$pidfile")"
+  local player_pid; player_pid="$(cat "$player_pidfile")"
+  kill -TERM "$loop_pid" 2>/dev/null
+  sleep 0.5
+  assert_not_ok "kill -0 '$player_pid'" "in-flight player is killed by TERM, not orphaned"
+}
+
 run_test test_json_field_extracts_session_id
 run_test test_sanitize_id_is_filename_safe
 run_test test_num_coerces_bad_values
@@ -184,6 +205,7 @@ run_test test_log_never_fails
 run_test test_loop_honours_the_repeat_cap
 run_test test_loop_writes_and_removes_its_pidfile
 run_test test_loop_stops_when_terminated
+run_test test_loop_kills_inflight_player_on_term
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

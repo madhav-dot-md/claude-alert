@@ -89,11 +89,27 @@ alert_player() {
   return 1
 }
 
-alert_play() {
+# Replace the current process with the player. ONLY safe inside a subshell —
+# in the main shell this would replace the caller.
+alert_exec_player() {
   local sound="$1" player
   player="$(alert_player)" || { alert_log "no audio player available"; return 1; }
   case "$(basename "$player")" in
-    ffplay) "$player" -nodisp -autoexit -loglevel quiet "$sound" >/dev/null 2>&1 ;;
-    *)      "$player" "$sound" >/dev/null 2>&1 ;;
+    ffplay) exec "$player" -nodisp -autoexit -loglevel quiet "$sound" >/dev/null 2>&1 ;;
+    *)      exec "$player" "$sound" >/dev/null 2>&1 ;;
   esac
+}
+
+# Blocking play, safe to call anywhere. The subshell contains the exec, so
+# alert_play's own caller is never replaced.
+#
+# A caller that needs to interrupt playback mid-sound (e.g. alert-loop.sh)
+# should background alert_exec_player directly instead of alert_play:
+# `alert_exec_player "$sound" & CHILD=$!`. Backgrounding a function call
+# forks exactly one subshell, and the exec inside it replaces that subshell
+# with the player — so $CHILD is the player's own PID, and `kill -TERM
+# "$CHILD"` reaches it directly instead of killing a wrapper and orphaning
+# the player underneath it.
+alert_play() {
+  ( alert_exec_player "$1" )
 }

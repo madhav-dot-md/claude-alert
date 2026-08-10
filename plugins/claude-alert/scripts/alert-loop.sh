@@ -15,10 +15,6 @@ CHILD=""
 
 [ -n "$SOUND" ] || exit 0
 
-if [ -n "$PIDFILE" ]; then
-  printf '%s' "$$" > "$PIDFILE" 2>/dev/null || PIDFILE=""
-fi
-
 cleanup() {
   # Silence whatever is playing right now rather than letting it finish.
   [ -n "$CHILD" ] && kill -TERM "$CHILD" 2>/dev/null
@@ -27,12 +23,23 @@ cleanup() {
     rm -f "$PIDFILE"
   fi
 }
+# Installed before the pidfile write: a TERM arriving in that window must
+# still be caught, or a stale pidfile is left behind for nothing to own.
 trap 'cleanup; exit 0' TERM INT
 trap cleanup EXIT
 
+if [ -n "$PIDFILE" ]; then
+  printf '%s' "$$" > "$PIDFILE" 2>/dev/null || { alert_log "failed to write pidfile: $PIDFILE"; PIDFILE=""; }
+fi
+
 i=0
 while [ "$i" -lt "$MAX" ]; do
-  alert_play "$SOUND" & CHILD=$!
+  # Background alert_exec_player directly (not alert_play): backgrounding a
+  # function call forks exactly one subshell, and the exec inside it
+  # replaces that subshell with the player — so $CHILD is the player's own
+  # PID and a TERM sent to it lands on the player, not a wrapper that can
+  # die and orphan the player underneath it.
+  alert_exec_player "$SOUND" & CHILD=$!
   wait "$CHILD" 2>/dev/null
   CHILD=""
   i=$((i + 1))
