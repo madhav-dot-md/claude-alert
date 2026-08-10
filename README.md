@@ -34,10 +34,12 @@ If you install no sound of your own, it falls back to the stock macOS
 | A background subagent is blocked on input | Repeats until you respond |
 | A task finishes | Plays once |
 
-The alarm stops the moment you respond — approve or deny a permission, type a
-prompt, or end the session. As a backstop it also stops itself after 15
-repeats (about 5 minutes), so it can never run away if Claude Code exits
-unexpectedly.
+The alarm stops when the approved command actually finishes running — not the
+moment you click approve — or when you type a new prompt, or when the turn
+ends. There is no hook at the instant you approve or deny a permission
+prompt, so an approved `npm install` keeps ringing for the whole install. As
+a backstop it also stops itself after 15 repeats (about 5 minutes), so it can
+never run away if Claude Code exits unexpectedly.
 
 ## Configuration
 
@@ -49,6 +51,7 @@ All optional environment variables.
 | `CLAUDE_ALERT_INTERVAL` | `20` | Seconds between repeats |
 | `CLAUDE_ALERT_MAX` | `15` | Maximum repeats before giving up |
 | `CLAUDE_ALERT_DISABLE` | unset | Set to `1` to mute without uninstalling |
+| `CLAUDE_ALERT_PLAYER` | auto-detected | Explicit playback command, overriding auto-detection |
 
 Set them in the `env` block of `~/.claude/settings.json`:
 
@@ -66,10 +69,21 @@ No runtime dependencies — it is plain bash.
 ## Troubleshooting
 
 `/alert-test` prints exactly what was resolved and why. Beyond that, the
-plugin logs to `${TMPDIR:-/tmp}/claude-alert/alert.log`.
+plugin logs to `${TMPDIR:-/tmp}/claude-alert-<your-uid>/alert.log` (run `id -u`
+to get your uid, or just `ls ${TMPDIR:-/tmp} | grep claude-alert`).
 
 The plugin never blocks a session: every script exits 0 on every path, so a
 misconfiguration makes it silent rather than disruptive.
+
+**Stuck alarm.** The loop is a detached background process, so if Claude Code
+is killed (`SIGKILL`) or the terminal window is closed outright, nothing is
+left to disarm it and it can keep ringing for up to 5 minutes on its own. To
+stop it immediately:
+
+```bash
+pkill -f alert-loop.sh
+rm -f "${TMPDIR:-/tmp}/claude-alert-$(id -u)"/*.pid
+```
 
 ## Known limitations
 
