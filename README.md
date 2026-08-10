@@ -29,9 +29,9 @@ If you install no sound of your own, it falls back to the stock macOS
 
 | Moment | Behaviour |
 | --- | --- |
-| Claude needs permission to run a tool | Repeats until you respond |
-| Claude has gone idle at an empty prompt | Repeats until you respond |
-| A background subagent is blocked on input | Repeats until you respond |
+| Claude needs permission to run a tool | Repeats until the approved command finishes |
+| Claude has gone idle at an empty prompt | Repeats until you send a prompt |
+| A background subagent is blocked on input | Repeats until the turn ends |
 | A task finishes | Plays once |
 
 The alarm stops when the approved command actually finishes running — not the
