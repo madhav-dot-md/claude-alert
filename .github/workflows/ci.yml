@@ -15,9 +15,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
       - name: Lint shell scripts
-        # -x: follow the `# shellcheck source=` directives below into lib.sh,
-        # which is sourced via a computed $SCRIPT_DIR path in every script.
-        run: shellcheck -x plugins/claude-alert/scripts/*.sh tests/*.sh tests/helpers/*.sh
+        run: shellcheck plugins/claude-alert/scripts/*.sh tests/*.sh tests/helpers/*.sh
 
       - name: Validate JSON manifests
         run: |
