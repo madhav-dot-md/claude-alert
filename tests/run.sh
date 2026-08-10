@@ -347,7 +347,7 @@ test_every_notification_type_is_wired() {
   # start a five-minute repeating alarm instead of playing one sound.
   assert_ok "grep -A 4 '\"matcher\": \"agent_completed\"' '$hooks' | grep -q -- '--once'" \
     "agent_completed's hook command uses --once, not --loop"
-  assert_ok "grep -A 4 'permission_prompt' '$hooks' | grep -q -- '--loop'" \
+  assert_ok "grep -A 4 '\"matcher\": \"permission_prompt|idle_prompt|agent_needs_input\"' '$hooks' | grep -q -- '--loop'" \
     "the --loop matcher is the one carrying permission_prompt"
 }
 

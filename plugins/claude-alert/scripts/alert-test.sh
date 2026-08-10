@@ -15,7 +15,11 @@ printf 'disabled=%s\n' "$([ "${CLAUDE_ALERT_DISABLE:-}" = "1" ] && printf yes ||
 
 if ! SOUND="$(alert_resolve_sound)"; then
   printf 'sound=<none>\n'
-  printf 'searched=$CLAUDE_ALERT_SOUND, %s/alert-sound.{wav,mp3,aiff,aif,m4a,caf}, /System/Library/Sounds/Submarine.aiff\n' "$HOME_DIR"
+  if [ -n "${CLAUDE_ALERT_SOUND:-}" ]; then
+    printf 'searched=%s\n' "$CLAUDE_ALERT_SOUND"
+  else
+    printf 'searched=%s/alert-sound.{wav,mp3,aiff,aif,m4a,caf}, /System/Library/Sounds/Submarine.aiff\n' "$HOME_DIR"
+  fi
   printf 'result=no-sound\n'
   printf 'hint=drop a short 1-3 second sound file at %s/alert-sound.wav\n' "$HOME_DIR"
   exit 0

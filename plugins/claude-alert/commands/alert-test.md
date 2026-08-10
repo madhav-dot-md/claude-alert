@@ -13,5 +13,9 @@ chosen, which player was used, and whether playback succeeded.
   `~/.claude/alert-sound.wav` and run `/alert-test` again.
 - If `result=no-player`, tell them no audio player was found — `afplay` is
   expected on macOS.
+- If `result=playback-failed`, tell them the sound file and player were both
+  found but playback itself failed — likely a corrupted or truncated file, a
+  permission error on the file, or a file that isn't actually audio despite
+  its extension — and suggest trying a different sound file.
 - If `result=ok` but they heard nothing, suggest checking system volume and
   output device.
