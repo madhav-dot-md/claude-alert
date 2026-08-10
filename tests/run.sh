@@ -342,12 +342,40 @@ test_every_notification_type_is_wired() {
   for t in UserPromptSubmit PostToolUse PermissionDenied SessionEnd; do
     assert_ok "grep -q '$t' '$hooks'" "$t disarm is wired"
   done
+  # The highest-cost value in the whole manifest: if agent_completed were
+  # ever wired to --loop instead of --once, every completed task would
+  # start a five-minute repeating alarm instead of playing one sound.
+  assert_ok "grep -A 4 '\"matcher\": \"agent_completed\"' '$hooks' | grep -q -- '--once'" \
+    "agent_completed's hook command uses --once, not --loop"
+  assert_ok "grep -A 4 'permission_prompt' '$hooks' | grep -q -- '--loop'" \
+    "the --loop matcher is the one carrying permission_prompt"
 }
 
 run_test test_manifests_are_valid_json
 run_test test_hooks_reference_scripts_that_exist
 run_test test_marketplace_points_at_the_plugin
 run_test test_every_notification_type_is_wired
+
+# --- /alert-test ---------------------------------------------------------
+
+test_alert_test_reports_the_resolved_sound() {
+  local out; out="$("$SCRIPTS/alert-test.sh")"
+  assert_ok "printf '%s' \"\$(printf '%s' '$out')\" | grep -q 'sound=$CLAUDE_ALERT_HOME/alert-sound.wav'" "reports the resolved sound"
+  assert_ok "printf '%s' '$out' | grep -q 'result=ok'" "reports success"
+  assert_eq "1" "$(play_count)" "played exactly once"
+}
+
+test_alert_test_is_helpful_when_no_sound_is_installed() {
+  rm -f "$CLAUDE_ALERT_HOME"/alert-sound.*
+  export CLAUDE_ALERT_SOUND="$SANDBOX/nope.wav"
+  local out; out="$("$SCRIPTS/alert-test.sh")"
+  assert_ok "printf '%s' '$out' | grep -q 'result=no-sound'" "reports the missing sound"
+  assert_ok "printf '%s' '$out' | grep -q 'alert-sound.wav'" "names where to put a file"
+  assert_eq "0" "$(play_count)" "nothing played"
+}
+
+run_test test_alert_test_reports_the_resolved_sound
+run_test test_alert_test_is_helpful_when_no_sound_is_installed
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
