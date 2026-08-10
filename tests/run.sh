@@ -207,5 +207,97 @@ run_test test_loop_writes_and_removes_its_pidfile
 run_test test_loop_stops_when_terminated
 run_test test_loop_kills_inflight_player_on_term
 
+# --- alert-start.sh / alert-stop.sh --------------------------------------
+
+start_loop() { # session
+  printf '{"session_id":"%s","hook_event_name":"Notification"}' "$1" | "$SCRIPTS/alert-start.sh" --loop
+}
+start_once() { # session
+  printf '{"session_id":"%s","hook_event_name":"Notification"}' "$1" | "$SCRIPTS/alert-start.sh" --once
+}
+send_stop() { # session
+  printf '{"session_id":"%s","hook_event_name":"PostToolUse"}' "$1" | "$SCRIPTS/alert-stop.sh"
+}
+pidfile_for() { printf '%s/claude-alert/%s.pid' "$TMPDIR" "$1"; }
+
+test_start_arms_and_stop_disarms() {
+  export CLAUDE_ALERT_INTERVAL=1 CLAUDE_ALERT_MAX=50
+  start_loop sess-a
+  assert_ok "wait_for_file '$(pidfile_for sess-a)' 30" "start writes a pidfile"
+  local pid; pid="$(cat "$(pidfile_for sess-a)")"
+  send_stop sess-a
+  sleep 0.5
+  assert_not_ok "kill -0 '$pid'" "stop kills the looper"
+  assert_ok "[ ! -f '$(pidfile_for sess-a)' ]" "stop clears the pidfile"
+}
+
+test_sessions_are_independent() {
+  export CLAUDE_ALERT_INTERVAL=1 CLAUDE_ALERT_MAX=50
+  start_loop sess-a
+  start_loop sess-b
+  wait_for_file "$(pidfile_for sess-a)" 30
+  wait_for_file "$(pidfile_for sess-b)" 30
+  local pid_b; pid_b="$(cat "$(pidfile_for sess-b)")"
+  send_stop sess-a
+  sleep 0.5
+  assert_ok "kill -0 '$pid_b'" "stopping session a leaves session b running"
+  send_stop sess-b
+}
+
+test_restarting_does_not_stack_alarms() {
+  export CLAUDE_ALERT_INTERVAL=1 CLAUDE_ALERT_MAX=50
+  start_loop sess-a
+  wait_for_file "$(pidfile_for sess-a)" 30
+  local first; first="$(cat "$(pidfile_for sess-a)")"
+  start_loop sess-a
+  sleep 0.5
+  assert_not_ok "kill -0 '$first'" "the previous looper was killed"
+  local second; second="$(cat "$(pidfile_for sess-a)")"
+  assert_ok "kill -0 '$second'" "exactly one looper remains"
+  send_stop sess-a
+}
+
+test_once_plays_a_single_time_and_leaves_no_pidfile() {
+  start_once sess-c
+  sleep 0.5
+  assert_eq "1" "$(play_count)" "played once"
+  assert_ok "[ ! -f '$(pidfile_for sess-c)' ]" "no pidfile for a one-shot"
+}
+
+test_disable_suppresses_everything() {
+  export CLAUDE_ALERT_DISABLE=1
+  start_loop sess-d
+  sleep 0.5
+  assert_eq "0" "$(play_count)" "nothing played"
+  assert_ok "[ ! -f '$(pidfile_for sess-d)' ]" "nothing armed"
+}
+
+test_malformed_input_is_ignored_without_error() {
+  assert_ok "printf 'not json' | '$SCRIPTS/alert-start.sh' --loop" "start exits 0 on garbage"
+  assert_ok "printf '' | '$SCRIPTS/alert-start.sh' --loop" "start exits 0 on empty stdin"
+  assert_ok "printf 'not json' | '$SCRIPTS/alert-stop.sh'" "stop exits 0 on garbage"
+  assert_eq "0" "$(play_count)" "nothing played from malformed input"
+}
+
+test_missing_sound_never_breaks_the_hook() {
+  rm -f "$CLAUDE_ALERT_HOME"/alert-sound.*
+  export CLAUDE_ALERT_SOUND="$SANDBOX/does-not-exist.wav"
+  assert_ok "start_loop sess-e" "start exits 0 with no resolvable sound"
+  assert_ok "[ ! -f '$(pidfile_for sess-e)' ]" "nothing armed with no sound"
+}
+
+test_stop_is_a_noop_when_nothing_is_armed() {
+  assert_ok "send_stop sess-none" "stop exits 0 with no alarm armed"
+}
+
+run_test test_start_arms_and_stop_disarms
+run_test test_sessions_are_independent
+run_test test_restarting_does_not_stack_alarms
+run_test test_once_plays_a_single_time_and_leaves_no_pidfile
+run_test test_disable_suppresses_everything
+run_test test_malformed_input_is_ignored_without_error
+run_test test_missing_sound_never_breaks_the_hook
+run_test test_stop_is_a_noop_when_nothing_is_armed
+
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

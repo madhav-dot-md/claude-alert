@@ -113,3 +113,16 @@ alert_exec_player() {
 alert_play() {
   ( alert_exec_player "$1" )
 }
+
+alert_kill_pidfile() {
+  local pidfile="$1" pid
+  [ -n "$pidfile" ] || return 0
+  [ -f "$pidfile" ] || return 0
+  pid="$(cat "$pidfile" 2>/dev/null)"
+  case "$pid" in
+    '' | *[!0-9]*) rm -f "$pidfile"; return 0 ;;
+  esac
+  kill -TERM "$pid" 2>/dev/null || true
+  rm -f "$pidfile" 2>/dev/null || true
+  return 0
+}
