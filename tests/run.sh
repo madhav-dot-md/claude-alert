@@ -299,5 +299,55 @@ run_test test_malformed_input_is_ignored_without_error
 run_test test_missing_sound_never_breaks_the_hook
 run_test test_stop_is_a_noop_when_nothing_is_armed
 
+# --- manifests -----------------------------------------------------------
+
+json_ok() { # path — validates syntax without requiring jq
+  if command -v jq >/dev/null 2>&1; then
+    jq empty "$1" 2>/dev/null
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$1" 2>/dev/null
+  else
+    printf 'SKIP: no json validator available\n' >&2
+    return 0
+  fi
+}
+
+test_manifests_are_valid_json() {
+  assert_ok "json_ok '$REPO_ROOT/.claude-plugin/marketplace.json'" "marketplace.json parses"
+  assert_ok "json_ok '$REPO_ROOT/plugins/claude-alert/.claude-plugin/plugin.json'" "plugin.json parses"
+  assert_ok "json_ok '$REPO_ROOT/plugins/claude-alert/hooks/hooks.json'" "hooks.json parses"
+}
+
+test_hooks_reference_scripts_that_exist() {
+  local hooks="$REPO_ROOT/plugins/claude-alert/hooks/hooks.json" name
+  for name in alert-start.sh alert-stop.sh; do
+    assert_ok "grep -q '$name' '$hooks'" "hooks.json references $name"
+    assert_ok "[ -x '$SCRIPTS/$name' ]" "$name exists and is executable"
+  done
+  assert_ok "[ -x '$SCRIPTS/alert-loop.sh' ]" "alert-loop.sh exists and is executable"
+}
+
+test_marketplace_points_at_the_plugin() {
+  local mk="$REPO_ROOT/.claude-plugin/marketplace.json"
+  assert_ok "grep -q '\"neel-tools\"' '$mk'" "marketplace name is neel-tools"
+  assert_ok "grep -q '\"./plugins/claude-alert\"' '$mk'" "source path points at the plugin"
+  assert_ok "[ -f '$REPO_ROOT/plugins/claude-alert/.claude-plugin/plugin.json' ]" "source path resolves"
+}
+
+test_every_notification_type_is_wired() {
+  local hooks="$REPO_ROOT/plugins/claude-alert/hooks/hooks.json" t
+  for t in permission_prompt idle_prompt agent_needs_input agent_completed; do
+    assert_ok "grep -q '$t' '$hooks'" "$t is wired"
+  done
+  for t in UserPromptSubmit PostToolUse PermissionDenied SessionEnd; do
+    assert_ok "grep -q '$t' '$hooks'" "$t disarm is wired"
+  done
+}
+
+run_test test_manifests_are_valid_json
+run_test test_hooks_reference_scripts_that_exist
+run_test test_marketplace_points_at_the_plugin
+run_test test_every_notification_type_is_wired
+
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

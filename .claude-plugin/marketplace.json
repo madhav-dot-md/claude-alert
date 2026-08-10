@@ -1,0 +1,19 @@
+{
+  "name": "neel-tools",
+  "description": "Claude Code plugins by Neel Madhav",
+  "owner": { "name": "Neel Madhav", "url": "https://github.com/madhav-dot-md" },
+  "plugins": [
+    {
+      "name": "claude-alert",
+      "source": "./plugins/claude-alert",
+      "description": "Plays a sound when Claude Code needs your attention, and keeps sounding until you come back",
+      "version": "0.1.0",
+      "author": { "name": "Neel Madhav", "url": "https://github.com/madhav-dot-md" },
+      "homepage": "https://github.com/madhav-dot-md/claude-alert",
+      "repository": "https://github.com/madhav-dot-md/claude-alert",
+      "license": "MIT",
+      "category": "productivity",
+      "keywords": ["hooks", "notification", "sound", "productivity", "macos"]
+    }
+  ]
+}
