@@ -218,8 +218,8 @@ source resolved against the marketplace root:
 
 ```json
 {
-  "name": "<MARKETPLACE_NAME>",
-  "owner": { "name": "<OWNER_NAME>", "url": "https://github.com/<GITHUB_OWNER>" },
+  "name": "neel-tools",
+  "owner": { "name": "Neel Madhav", "url": "https://github.com/madhav-dot-md" },
   "plugins": [
     {
       "name": "claude-alert",
@@ -239,18 +239,21 @@ baked into every user's install — renaming it later breaks them.
 
 ### Deployment parameters
 
-Two values are supplied at repo-creation time and are the only unresolved inputs:
+| Parameter | Value |
+| --- | --- |
+| Repository | `https://github.com/madhav-dot-md/claude-alert` |
+| Marketplace name | `neel-tools` |
+| Plugin name | `claude-alert` |
 
-- `<GITHUB_OWNER>` — the GitHub user or org that will host the repo
-- `<MARKETPLACE_NAME>` — kebab-case, and must avoid the reserved names Anthropic holds
-  (`claude-plugins-official`, `anthropic-plugins`, and similar), as well as anything that
-  reads as an official Anthropic source
+`neel-tools` is not among the names Anthropic reserves and does not read as an official
+Anthropic source, so it loads as a third-party marketplace without issue. `owner.email` is
+left unset — it is optional, and `marketplace.json` is a public file.
 
 ### Install, for anyone
 
 ```
-/plugin marketplace add <GITHUB_OWNER>/claude-alert
-/plugin install claude-alert@<MARKETPLACE_NAME>
+/plugin marketplace add madhav-dot-md/claude-alert
+/plugin install claude-alert@neel-tools
 ```
 
 Then drop a sound at `~/.claude/alert-sound.wav` and run `/alert-test`. Three lines, and that
