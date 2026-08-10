@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# The detached alarm. Not invoked by hooks directly — alert-start.sh spawns it.
+# Usage: alert-loop.sh <sound> <max-repeats> <interval-seconds> [pidfile]
+set -u
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+. "$SCRIPT_DIR/lib.sh"
+
+SOUND="${1:-}"
+MAX="$(alert_num "${2:-}" 15)"
+INTERVAL="$(alert_num "${3:-}" 20)"
+PIDFILE="${4:-}"
+CHILD=""
+
+[ -n "$SOUND" ] || exit 0
+
+if [ -n "$PIDFILE" ]; then
+  printf '%s' "$$" > "$PIDFILE" 2>/dev/null || PIDFILE=""
+fi
+
+cleanup() {
+  # Silence whatever is playing right now rather than letting it finish.
+  [ -n "$CHILD" ] && kill -TERM "$CHILD" 2>/dev/null
+  # Only remove the pidfile if it is still ours; a newer alarm may own it.
+  if [ -n "$PIDFILE" ] && [ -f "$PIDFILE" ] && [ "$(cat "$PIDFILE" 2>/dev/null)" = "$$" ]; then
+    rm -f "$PIDFILE"
+  fi
+}
+trap 'cleanup; exit 0' TERM INT
+trap cleanup EXIT
+
+i=0
+while [ "$i" -lt "$MAX" ]; do
+  alert_play "$SOUND" & CHILD=$!
+  wait "$CHILD" 2>/dev/null
+  CHILD=""
+  i=$((i + 1))
+  [ "$i" -lt "$MAX" ] || break
+  sleep "$INTERVAL" & CHILD=$!
+  wait "$CHILD" 2>/dev/null
+  CHILD=""
+done
+exit 0

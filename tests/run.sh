@@ -134,6 +134,46 @@ test_log_never_fails() {
   assert_ok "[ -f '$logfile' ]" "log file created"
 }
 
+# --- alert-loop.sh -------------------------------------------------------
+
+wait_for_file() { # path timeout-tenths
+  local i=0
+  while [ "$i" -lt "${2:-30}" ]; do
+    [ -e "$1" ] && return 0
+    sleep 0.1
+    i=$((i + 1))
+  done
+  return 1
+}
+
+test_loop_honours_the_repeat_cap() {
+  local sound="$CLAUDE_ALERT_HOME/alert-sound.wav"
+  "$SCRIPTS/alert-loop.sh" "$sound" 3 0
+  assert_eq "3" "$(play_count)" "plays exactly max times then exits"
+}
+
+test_loop_writes_and_removes_its_pidfile() {
+  local pidfile="$TMPDIR/claude-alert/loop.pid"
+  mkdir -p "$TMPDIR/claude-alert"
+  "$SCRIPTS/alert-loop.sh" "$CLAUDE_ALERT_HOME/alert-sound.wav" 1 0 "$pidfile"
+  assert_ok "[ ! -f '$pidfile' ]" "pidfile removed on normal exit"
+}
+
+test_loop_stops_when_terminated() {
+  local pidfile="$TMPDIR/claude-alert/loop.pid"
+  mkdir -p "$TMPDIR/claude-alert"
+  "$SCRIPTS/alert-loop.sh" "$CLAUDE_ALERT_HOME/alert-sound.wav" 50 1 "$pidfile" &
+  wait_for_file "$pidfile" 30
+  local pid; pid="$(cat "$pidfile")"
+  kill -TERM "$pid" 2>/dev/null
+  sleep 0.5
+  assert_not_ok "kill -0 '$pid'" "loop is gone after TERM"
+  assert_ok "[ ! -f '$pidfile' ]" "pidfile cleaned up after TERM"
+  local before; before="$(play_count)"
+  sleep 1.5
+  assert_eq "$before" "$(play_count)" "no further playbacks after TERM"
+}
+
 run_test test_json_field_extracts_session_id
 run_test test_sanitize_id_is_filename_safe
 run_test test_num_coerces_bad_values
@@ -141,6 +181,9 @@ run_test test_resolve_sound_precedence
 run_test test_resolve_sound_fails_when_nothing_available
 run_test test_play_invokes_the_player
 run_test test_log_never_fails
+run_test test_loop_honours_the_repeat_cap
+run_test test_loop_writes_and_removes_its_pidfile
+run_test test_loop_stops_when_terminated
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
