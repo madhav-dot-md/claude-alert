@@ -4,13 +4,40 @@
 # check return codes, but a failure must never abort a Claude Code session.
 
 alert_state_dir() {
-  printf '%s/claude-alert' "${TMPDIR:-/tmp}"
+  printf '%s/claude-alert-%s' "${TMPDIR:-/tmp}" "$(id -u)"
+}
+
+# Namespaced by uid so a shared /tmp fallback (TMPDIR unset — Linux,
+# containers, launchd/cron, env -i) can't be pre-created by another local
+# user. Still refuses a pre-existing symlink or a directory we don't own,
+# since a same-uid namespace only helps if we also refuse to follow
+# something an attacker planted before we got here.
+#
+# $1: pass "create" to mkdir -m 700 -p it when missing; otherwise read-only
+# (used by the disarm fast path, which must not create state that was never
+# armed). Prints the dir on success; prints nothing and returns 1 otherwise.
+# Never calls alert_log: alert_log depends on this, and logging a failure to
+# obtain a safe log directory would recurse.
+alert_safe_state_dir() {
+  local dir
+  dir="$(alert_state_dir)"
+  [ -L "$dir" ] && return 1
+  if [ "${1:-}" = create ]; then
+    # A tightened umask (rather than `mkdir -m 700 -p`) so every directory
+    # -p creates along the way — not just the deepest one — comes out
+    # private from the moment it exists, with no window where a
+    # default-mode intermediate directory is briefly world-readable.
+    ( umask 077 && mkdir -p "$dir" ) 2>/dev/null
+  fi
+  [ -d "$dir" ] || return 1
+  [ -O "$dir" ] || return 1
+  printf '%s' "$dir"
+  return 0
 }
 
 alert_log() {
   local dir
-  dir="$(alert_state_dir)"
-  mkdir -p "$dir" 2>/dev/null || return 0
+  dir="$(alert_safe_state_dir create)" || return 0
   printf '%s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*" >> "$dir/alert.log" 2>/dev/null || true
   return 0
 }
@@ -35,7 +62,10 @@ alert_json_field() {
 # keeping them would let a raw id of ".." (or embedded "..") sanitize to
 # itself, defeating the very traversal protection this function exists for.
 alert_sanitize_id() {
-  printf '%s' "$1" | tr -c 'A-Za-z0-9_-' '_' | cut -c1-64
+  # LC_ALL=C: BSD tr exits 1 and truncates output on an illegal byte
+  # sequence under a UTF-8 locale, which would otherwise let a session_id
+  # containing invalid UTF-8 collapse to a short or empty string.
+  printf '%s' "$1" | LC_ALL=C tr -c 'A-Za-z0-9_-' '_' | cut -c1-64
 }
 
 alert_num() {

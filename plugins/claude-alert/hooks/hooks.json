@@ -37,6 +37,20 @@
         ]
       }
     ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/alert-stop.sh\"", "timeout": 5 }
+        ]
+      }
+    ],
+    "PostToolBatch": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/alert-stop.sh\"", "timeout": 5 }
+        ]
+      }
+    ],
     "PermissionDenied": [
       {
         "hooks": [
@@ -45,6 +59,13 @@
       }
     ],
     "SessionEnd": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/alert-stop.sh\"", "timeout": 5 }
+        ]
+      }
+    ],
+    "Stop": [
       {
         "hooks": [
           { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/alert-stop.sh\"", "timeout": 5 }

@@ -21,10 +21,21 @@ if [ -z "$SESSION_RAW" ]; then
   exit 0
 fi
 SESSION="$(alert_sanitize_id "$SESSION_RAW")"
+if [ -z "$SESSION" ]; then
+  alert_log "start: session_id sanitised to empty, ignoring"
+  exit 0
+fi
 
 SOUND="$(alert_resolve_sound)" || { alert_log "start: no sound file resolvable"; exit 0; }
 
-STATE_DIR="$(alert_state_dir)"
+# Without a player, the loop would still run every iteration for the full
+# repeat cap, just to log failure each time and hold a live pidfile for
+# nothing. Fail here instead of arming.
+if ! alert_player >/dev/null; then
+  alert_log "start: no audio player available, not arming"
+  exit 0
+fi
+
 INTERVAL="$(alert_num "${CLAUDE_ALERT_INTERVAL:-}" 20)"
 MAX="$(alert_num "${CLAUDE_ALERT_MAX:-}" 15)"
 
@@ -34,8 +45,9 @@ if [ "$MODE" = "--once" ]; then
   exit 0
 fi
 
-if ! mkdir -p "$STATE_DIR" 2>/dev/null; then
-  alert_log "start: state dir unwritable, degrading to a single play"
+STATE_DIR="$(alert_safe_state_dir create)"
+if [ -z "$STATE_DIR" ]; then
+  alert_log "start: state dir unusable, degrading to a single play"
   ( nohup "$SCRIPT_DIR/alert-loop.sh" "$SOUND" 1 0 </dev/null >/dev/null 2>&1 & )
   exit 0
 fi

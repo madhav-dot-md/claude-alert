@@ -23,6 +23,12 @@ cleanup() {
   if [ -n "$PIDFILE" ] && [ -f "$PIDFILE" ] && [ "$(cat "$PIDFILE" 2>/dev/null)" = "$$" ]; then
     rm -f "$PIDFILE"
   fi
+  # Idempotent: the TERM/INT trap and the EXIT trap both run cleanup on a
+  # signal-triggered exit. Clearing CHILD and disarming the EXIT trap stops
+  # the second call from re-sending TERM to a PID that may already have
+  # been reaped and reused by something else.
+  CHILD=""
+  trap - EXIT
 }
 # Installed before the pidfile write: a TERM arriving in that window must
 # still be caught, or a stale pidfile is left behind for nothing to own.

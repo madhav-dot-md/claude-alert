@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Disarm entry point for UserPromptSubmit, PostToolUse, PermissionDenied and
-# SessionEnd. PostToolUse fires on every single tool call, so the common path
-# — nothing armed — must stay as close to free as possible.
+# Disarm entry point for UserPromptSubmit, PostToolUse, PostToolUseFailure,
+# PostToolBatch, PermissionDenied, SessionEnd and Stop. PostToolUse fires on
+# every single tool call, so the common path — nothing armed — must stay as
+# close to free as possible.
 set -u
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,8 +11,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 RAW="$(cat)"
 
-STATE_DIR="$(alert_state_dir)"
-[ -d "$STATE_DIR" ] || exit 0
+# Read-only: never create the state dir just because a disarm event fired.
+STATE_DIR="$(alert_safe_state_dir)" || exit 0
 
 # Fast path: no alarm armed anywhere, so skip parsing entirely.
 set -- "$STATE_DIR"/*.pid
