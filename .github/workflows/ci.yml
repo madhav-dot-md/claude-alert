@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts
+        # -x: follow the `# shellcheck source=` directives below into lib.sh,
+        # which is sourced via a computed $SCRIPT_DIR path in every script.
+        run: shellcheck -x plugins/claude-alert/scripts/*.sh tests/*.sh tests/helpers/*.sh
+
+      - name: Validate JSON manifests
+        run: |
+          for f in .claude-plugin/marketplace.json \
+                   plugins/claude-alert/.claude-plugin/plugin.json \
+                   plugins/claude-alert/hooks/hooks.json; do
+            python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f"
+            echo "ok $f"
+          done
+
+      - name: Run test suite
+        run: bash tests/run.sh

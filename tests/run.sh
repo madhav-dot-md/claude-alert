@@ -73,6 +73,7 @@ play_count() { # counts recorded playbacks — one line per playback
 # --- lib.sh --------------------------------------------------------------
 
 test_json_field_extracts_session_id() {
+  # shellcheck source=plugins/claude-alert/scripts/lib.sh
   . "$SCRIPTS/lib.sh"
   local json='{"session_id":"abc-123","hook_event_name":"Notification"}'
   assert_eq "abc-123" "$(alert_json_field session_id "$json")" "extracts session_id"
@@ -81,6 +82,7 @@ test_json_field_extracts_session_id() {
 }
 
 test_sanitize_id_is_filename_safe() {
+  # shellcheck source=plugins/claude-alert/scripts/lib.sh
   . "$SCRIPTS/lib.sh"
   assert_eq "abc-123" "$(alert_sanitize_id 'abc-123')" "passes clean id through"
   assert_eq "___etc_passwd" "$(alert_sanitize_id '../etc/passwd')" "neutralises path traversal"
@@ -90,6 +92,7 @@ test_sanitize_id_is_filename_safe() {
 }
 
 test_num_coerces_bad_values() {
+  # shellcheck source=plugins/claude-alert/scripts/lib.sh
   . "$SCRIPTS/lib.sh"
   assert_eq "7" "$(alert_num 7 20)" "keeps a valid number"
   assert_eq "20" "$(alert_num '' 20)" "empty falls back"
@@ -98,6 +101,7 @@ test_num_coerces_bad_values() {
 }
 
 test_resolve_sound_precedence() {
+  # shellcheck source=plugins/claude-alert/scripts/lib.sh
   . "$SCRIPTS/lib.sh"
   assert_eq "$CLAUDE_ALERT_HOME/alert-sound.wav" "$(alert_resolve_sound)" "finds ~/.claude/alert-sound.wav"
 
@@ -112,6 +116,7 @@ test_resolve_sound_precedence() {
 }
 
 test_resolve_sound_fails_when_nothing_available() {
+  # shellcheck source=plugins/claude-alert/scripts/lib.sh
   . "$SCRIPTS/lib.sh"
   rm -f "$CLAUDE_ALERT_HOME"/alert-sound.*
   if [ -r /System/Library/Sounds/Submarine.aiff ]; then
@@ -122,12 +127,14 @@ test_resolve_sound_fails_when_nothing_available() {
 }
 
 test_play_invokes_the_player() {
+  # shellcheck source=plugins/claude-alert/scripts/lib.sh
   . "$SCRIPTS/lib.sh"
   alert_play "$CLAUDE_ALERT_HOME/alert-sound.wav"
   assert_eq "1" "$(play_count)" "player invoked exactly once"
 }
 
 test_log_never_fails() {
+  # shellcheck source=plugins/claude-alert/scripts/lib.sh
   . "$SCRIPTS/lib.sh"
   assert_ok "alert_log 'hello'" "log succeeds"
   local logfile; logfile="$(alert_state_dir)/alert.log"

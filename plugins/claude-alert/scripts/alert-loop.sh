@@ -4,7 +4,7 @@
 set -u
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib.sh
+# shellcheck source=plugins/claude-alert/scripts/lib.sh
 . "$SCRIPT_DIR/lib.sh"
 
 SOUND="${1:-}"
@@ -15,6 +15,7 @@ CHILD=""
 
 [ -n "$SOUND" ] || exit 0
 
+# shellcheck disable=SC2329 # invoked indirectly, via the trap calls below
 cleanup() {
   # Silence whatever is playing right now rather than letting it finish.
   [ -n "$CHILD" ] && kill -TERM "$CHILD" 2>/dev/null

@@ -4,7 +4,7 @@
 set -u
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib.sh
+# shellcheck source=plugins/claude-alert/scripts/lib.sh
 . "$SCRIPT_DIR/lib.sh"
 
 HOME_DIR="${CLAUDE_ALERT_HOME:-$HOME/.claude}"
