@@ -15,7 +15,7 @@ CHILD=""
 
 [ -n "$SOUND" ] || exit 0
 
-# shellcheck disable=SC2329 # invoked indirectly, via the trap calls below
+# shellcheck disable=SC2329,SC2317 # invoked indirectly, via the trap calls below
 cleanup() {
   # Silence whatever is playing right now rather than letting it finish.
   [ -n "$CHILD" ] && kill -TERM "$CHILD" 2>/dev/null
