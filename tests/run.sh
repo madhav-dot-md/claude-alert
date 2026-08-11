@@ -443,13 +443,14 @@ test_every_notification_type_is_wired() {
   for t in UserPromptSubmit PostToolUse PostToolUseFailure PostToolBatch PermissionDenied SessionEnd Stop; do
     assert_ok "grep -q '\"$t\"' '$hooks'" "$t disarm is wired"
   done
-  # The highest-cost value in the whole manifest: if agent_completed were
-  # ever wired to --loop instead of --once, every completed task would
-  # start a five-minute repeating alarm instead of playing one sound.
-  assert_ok "grep -A 4 '\"matcher\": \"agent_completed\"' '$hooks' | grep -q -- '--once'" \
-    "agent_completed's hook command uses --once, not --loop"
-  assert_ok "grep -A 4 '\"matcher\": \"permission_prompt|idle_prompt|agent_needs_input\"' '$hooks' | grep -q -- '--loop'" \
-    "the --loop matcher is the one carrying permission_prompt"
+  # The highest-cost value in the whole manifest: if agent_completed or
+  # idle_prompt were ever wired to --loop instead of --once, a completed
+  # task or a background-command wait would start a five-minute repeating
+  # alarm instead of playing one sound.
+  assert_ok "grep -A 4 '\"matcher\": \"idle_prompt|agent_completed\"' '$hooks' | grep -q -- '--once'" \
+    "idle_prompt and agent_completed's hook command uses --once, not --loop"
+  assert_ok "grep -A 4 '\"matcher\": \"permission_prompt|agent_needs_input\"' '$hooks' | grep -q -- '--loop'" \
+    "the --loop matcher carries permission_prompt and agent_needs_input, not idle_prompt"
 }
 
 run_test test_manifests_are_valid_json
